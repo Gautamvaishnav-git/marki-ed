@@ -17,10 +17,10 @@
 - [x] Test commands via Tauri dev tools
 
 ### Phase 3: File Tree (1 hour)
-- [ ] Create `FileTree.svelte` - flat list only
-- [ ] Wire up `list_dir` command
-- [ ] Implement click → emit file path to parent mechanism
-- [ ] Use emoji indicators (📁 📝) - no icon libs
+- [x] Create `FileTree.svelte` - flat list only
+- [x] Wire up `list_dir` command
+- [x] Implement click → emit file path to parent mechanism
+- [x] Use emoji indicators (📁 📝) - no icon libs
 
 ### Phase 4: Editor Core (2-3 hours)
 - [ ] Install CodeMirror 6: `npm i @codemirror/state @codemirror/view @codemirror/lang-markdown`
