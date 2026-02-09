@@ -42,3 +42,7 @@ export async function createDir(path: string): Promise<void> {
 export async function deleteNode(path: string): Promise<void> {
     await invoke("delete_node", { path });
 }
+
+export async function renameNode(oldPath: string, newPath: string): Promise<void> {
+    await invoke("rename_node", { oldPath, newPath });
+}

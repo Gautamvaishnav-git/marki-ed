@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
     import { EditorState } from "@codemirror/state";
-    import { EditorView, keymap } from "@codemirror/view";
+    import { EditorView, keymap, lineNumbers } from "@codemirror/view";
     import { markdown } from "@codemirror/lang-markdown";
     import {
         defaultKeymap,
@@ -11,7 +11,11 @@
     import { oneDark } from "@codemirror/theme-one-dark";
 
     // Using $props() for Svelte 5
-    let { content = "", onSave = (text: string) => {} } = $props();
+    let {
+        content = "",
+        onSave = (text: string) => {},
+        onChange = (text: string) => {},
+    } = $props();
 
     let editorContainer: HTMLDivElement;
     let view: EditorView;
@@ -37,6 +41,12 @@
                 markdown(),
                 oneDark,
                 EditorView.lineWrapping,
+                lineNumbers(),
+                EditorView.updateListener.of((update) => {
+                    if (update.docChanged) {
+                        onChange(update.state.doc.toString());
+                    }
+                }),
             ],
         });
 
@@ -75,7 +85,7 @@
     .editor-wrapper {
         height: 100%;
         width: 100%;
-        overflow: hidden;
+        overflow: hidden; /* CodeMirror handles scroll */
         font-size: 16px;
         background-color: #282c34; /* Match One Dark background roughly */
     }

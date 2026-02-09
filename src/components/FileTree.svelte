@@ -7,9 +7,12 @@
         createDir,
         writeFile,
         deleteNode,
+        renameNode,
     } from "$lib/api.v1";
 
     const dispatch = createEventDispatcher();
+
+    let { selectedFile = null } = $props();
 
     interface TreeNode {
         name: string;
@@ -73,15 +76,8 @@
         }
     }
 
-    // Determine parent path of a node to refresh relevant part of tree
-    // For simplicity MVP: just reload roots or specific parent if we knew it.
-    // We can just reload roots for most ops.
     async function refreshTree() {
         await loadRoots();
-        // If we modified a deep node, we lose expansion state with this simple reload.
-        // Better approach: track open paths and re-open?
-        // Or just reload the parent folder?
-        // For MVP, reload roots is safest to ensure consistency.
     }
 
     async function handleOpenFolder() {
@@ -89,6 +85,7 @@
             const path = await openFolder();
             if (path) {
                 await setWorkspace(path);
+                localStorage.setItem("lastWorkspace", path); // PERSISTENCE
                 await loadRoots();
             }
         } catch (e) {
@@ -106,7 +103,6 @@
                       ? contextNode.path.split("/").slice(0, -1).join("/")
                       : "."
                   : ".";
-        // Prompt logic
         const name = prompt("Enter file name (e.g. note.md):");
         if (!name) return;
 
@@ -157,6 +153,30 @@
         closeContextMenu();
     }
 
+    async function handleRename(node: TreeNode) {
+        const newName = prompt("Enter new name:", node.name);
+        if (!newName || newName === node.name) return;
+
+        const parentPath = node.path.includes("/")
+            ? node.path.split("/").slice(0, -1).join("/")
+            : ".";
+        const newPath =
+            parentPath === "." ? newName : `${parentPath}/${newName}`;
+
+        try {
+            await renameNode(node.path, newPath);
+            await refreshTree();
+            // If the renamed file was selected, update selection?
+            // Actually parent might need to know, but for now just refresh tree.
+            if (selectedFile === node.path) {
+                dispatch("file-selected", newPath);
+            }
+        } catch (e) {
+            error = `Failed to rename: ${e}`;
+        }
+        closeContextMenu();
+    }
+
     function handleContextMenu(event: MouseEvent, node: TreeNode) {
         event.preventDefault();
         event.stopPropagation();
@@ -166,7 +186,6 @@
             y: event.clientY,
             node: node,
         };
-        // Global click listener to close
         document.addEventListener("click", closeContextMenu, { once: true });
     }
 
@@ -199,6 +218,10 @@
             toggleExpand(node);
         }
     }
+
+    onMount(() => {
+        loadRoots();
+    });
 </script>
 
 <div
@@ -206,6 +229,8 @@
     oncontextmenu={(e) => {
         e.preventDefault();
     }}
+    role="tree"
+    tabindex="0"
 >
     <div class="header">
         <div class="title-row">
@@ -244,12 +269,14 @@
                 node.type === "dir" ||
                 !showMarkdownOnly ||
                 isMarkdown(node.name)}
+            {@const isSelected = selectedFile === node.path}
 
             {#if isVisible}
                 <div class="tree-item">
                     <button
                         class="node-btn {node.type}"
                         class:expanded={node.expanded}
+                        class:selected={isSelected}
                         onclick={() => handleFileClick(node)}
                         oncontextmenu={(e) => handleContextMenu(e, node)}
                         title={node.path}
@@ -288,7 +315,6 @@
         <div
             class="context-menu"
             style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
-            oncontextmenu={(e) => e.preventDefault()}
         >
             <button onclick={() => handleNewFile(contextMenu.node)}
                 >New File</button
@@ -302,6 +328,11 @@
                 onclick={() =>
                     contextMenu.node && handleDelete(contextMenu.node)}
                 >Delete</button
+            >
+            <button
+                onclick={() =>
+                    contextMenu.node && handleRename(contextMenu.node)}
+                >Rename</button
             >
         </div>
     {/if}
@@ -320,12 +351,8 @@
         color: #ccc;
         font-family: "Segoe UI", sans-serif;
         user-select: none;
-        position: relative; /* Context menu might act weird if overflow: auto on parent? */
+        position: relative;
     }
-
-    /* Ensure context menu isn't clipped by tree overflow */
-    /* If tree content scrolls, best to attach context menu to body or use fixed pos */
-    /* With fixed position (implicitly via x/y from clientX/Y), it should be fine */
 
     .header {
         margin-bottom: 10px;
@@ -413,6 +440,11 @@
         color: #fff;
     }
 
+    .node-btn.selected {
+        background-color: #094771; /* VS Code selected style */
+        color: #fff;
+    }
+
     .icon {
         margin-right: 6px;
         width: 16px;
@@ -426,7 +458,7 @@
     }
 
     .children {
-        margin-left: 14px; /* Indentation */
+        margin-left: 14px;
         border-left: 1px solid #444;
     }
 
@@ -482,7 +514,7 @@
     }
 
     .context-menu button:hover {
-        background-color: #094771; /* VS Code list focus color */
+        background-color: #094771;
         color: #fff;
     }
 

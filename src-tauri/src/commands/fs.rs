@@ -130,3 +130,27 @@ pub async fn delete_node(path: String, workspace: State<'_, Mutex<PathBuf>>) -> 
             .map_err(|e| e.to_string())
     }
 }
+
+#[tauri::command]
+pub async fn rename_node(
+    old_path: String,
+    new_path: String,
+    workspace: State<'_, Mutex<PathBuf>>,
+) -> Result<(), String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_old_path = workspace_path.join(&old_path);
+    let full_new_path = workspace_path.join(&new_path);
+
+    // Security checks
+    if !full_old_path.starts_with(&workspace_path) || !full_new_path.starts_with(&workspace_path) {
+        return Err("Path outside workspace".into());
+    }
+
+    if full_new_path.exists() {
+        return Err("Destination already exists".into());
+    }
+
+    tokio::fs::rename(full_old_path, full_new_path)
+        .await
+        .map_err(|e| e.to_string())
+}

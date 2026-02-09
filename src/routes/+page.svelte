@@ -1,22 +1,30 @@
 <script lang="ts">
-  import { readFile, writeFile } from "$lib/api.v1";
+  import { onMount } from "svelte";
+  import { readFile, writeFile, setWorkspace } from "$lib/api.v1";
   import FileTree from "../components/FileTree.svelte";
   import Editor from "../components/Editor.svelte";
+  import Preview from "../components/Preview.svelte";
 
   let status = $state("Select a file...");
   let fileContent = $state("");
   let currentFile = $state<string | null>(null);
-  let showPreview = $state(false); // Placeholder for phase 5
+  let showPreview = $state(false);
+
+  // Autosave State
+  let autosaveEnabled = $state(false);
+  let autosaveTimer: number | null = null;
+  const AUTOSAVE_DELAY = 2000; // 2 seconds
+
+  // Resizing State
+  let isResizing = $state(false);
+  let editorWidth = $state(50); // percentage
 
   async function handleFileSelected(event: CustomEvent<string>) {
     const filename = event.detail;
-    // Even if currentFile is same, we might want to reload if it changed on disk?
-    // But for performance, skip if same.
     if (filename === currentFile) return;
 
     status = `Loading ${filename}...`;
     try {
-      // Clear content to ensure editor resets, especially if new file is empty
       fileContent = "";
 
       const content = await readFile(filename);
@@ -29,54 +37,197 @@
     }
   }
 
+  // Generic Save Function
+  async function performSave(
+    filename: string,
+    content: string,
+    isAuto: boolean = false,
+  ) {
+    status = isAuto ? `Autosaving ${filename}...` : `Saving ${filename}...`;
+    try {
+      await writeFile(filename, content);
+      // Don't update fileContent here as it might conflict with typing if not careful,
+      // but for now it's fine since we just saved what is there.
+      // Actually, better NOT to update fileContent to avoid loop if Editor syncs back.
+      // Editor pushes changes -> fileContent updates? No, currently one way prop.
+      // But for this app structure, Editor state is source of truth during edit.
+
+      status = isAuto ? `Autosaved ${filename}` : `Saved ${filename}!`;
+
+      setTimeout(() => {
+        if (status.startsWith("Saved") || status.startsWith("Autosaved")) {
+          status = `Viewing: ${filename}`;
+        }
+      }, 2000);
+    } catch (e) {
+      status = `Error saving ${filename}: ${e}`;
+      console.error(e);
+    }
+  }
+
   async function handleSave(content: string) {
     if (!currentFile) {
       status = "No file selected to save.";
       return;
     }
+    await performSave(currentFile, content);
+  }
 
-    status = `Saving ${currentFile}...`;
-    try {
-      await writeFile(currentFile, content);
-      fileContent = content;
-      status = `Saved ${currentFile}!`;
+  function handleEditorChange(newContent: string) {
+    // Update local content state? Maybe not needed if we trust Editor state.
+    // But we might need it for Preview update if we bind it?
+    fileContent = newContent; // Sync for Preview
 
-      // Clear "Saved!" message after 2 seconds
-      setTimeout(() => {
-        if (status.startsWith("Saved")) {
-          status = `Viewing: ${currentFile}`;
-        }
-      }, 2000);
-    } catch (e) {
-      status = `Error saving ${currentFile}: ${e}`;
-      console.error(e);
+    if (autosaveEnabled && currentFile) {
+      if (autosaveTimer) clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(() => {
+        if (currentFile) performSave(currentFile, newContent, true);
+      }, AUTOSAVE_DELAY);
     }
   }
 
   function togglePreview() {
     showPreview = !showPreview;
-    // TODO: Implement actual split pane in Phase 5
-    status = showPreview
-      ? "Preview Mode (Pending)"
-      : `Viewing: ${currentFile || "..."}`;
   }
+
+  function toggleAutosave() {
+    autosaveEnabled = !autosaveEnabled;
+    localStorage.setItem("autosaveEnabled", String(autosaveEnabled));
+    status = autosaveEnabled ? "Autosave Enabled" : "Autosave Disabled";
+    setTimeout(() => {
+      if (status.startsWith("Autosave"))
+        status = `Viewing: ${currentFile || "..."}`;
+    }, 2000);
+  }
+
+  // Workspace Persistence
+  async function loadLastWorkspace() {
+    const last = localStorage.getItem("lastWorkspace");
+    if (last) {
+      try {
+        console.log("Restoring workspace:", last);
+        await setWorkspace(last);
+        // We rely on FileTree to load roots on mount,
+        // but we need to ensure it knows the workspace is set.
+        // FileTree calls loadRoots onMount, which calls listDir(".").
+        // listDir uses backend state. So if we await setWorkspace first, we are good.
+        // But FileTree is child... so onMount here happens AFTER FileTree onMount?
+        // No, parent onMount happens after child onMount usually.
+        // We can trigger FileTree refresh? Or better, pass workspace as prop?
+        // Or simpler: FileTree loads roots, if it fails/empty, maybe it retries?
+        // Actually, FileTree onMount calls loadRoots immediately.
+        // If we set workspace here in Parent onMount, we might race.
+        // Fix: We should probably trigger a refresh.
+        // Hack: Force remount of FileTree? Or expose a method.
+        // Better: Just let FileTree handle its own persistence? No, global app state.
+        // Let's pass a key to FileTree.
+        // Or use an event.
+        // For now, let's just accept the race or reload page?
+        // Actually, we can just use the `api.v1` to set workspace before app mounts if possible?
+        // Standard way: Parent sets up env, then renders children.
+
+        // We can put FileTree in a {#await} block?
+      } catch (e) {
+        console.error("Failed to restore workspace", e);
+      }
+    }
+
+    const autosave = localStorage.getItem("autosaveEnabled");
+    if (autosave === "true") autosaveEnabled = true;
+  }
+
+  // Resizing Logic
+  function startResize() {
+    isResizing = true;
+  }
+
+  function stopResize() {
+    isResizing = false;
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isResizing) return;
+    const container = document.querySelector(".workspace-area");
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+
+    let newPercent = (x / width) * 100;
+    // Clamp
+    if (newPercent < 10) newPercent = 10;
+    if (newPercent > 90) newPercent = 90;
+
+    editorWidth = newPercent;
+  }
+
+  let workspaceReady = $state(false);
+
+  onMount(() => {
+    loadLastWorkspace().then(() => {
+      workspaceReady = true;
+    });
+
+    window.addEventListener("mouseup", stopResize);
+    window.addEventListener("mousemove", onMouseMove);
+
+    return () => {
+      window.removeEventListener("mouseup", stopResize);
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  });
 </script>
 
 <div class="app-container">
   <aside class="sidebar">
-    <FileTree on:file-selected={handleFileSelected} />
+    {#if workspaceReady}
+      <FileTree
+        on:file-selected={handleFileSelected}
+        selectedFile={currentFile}
+      />
+    {/if}
   </aside>
   <main class="main-content">
-    <div class="status-bar">
+    <header class="status-bar">
       <span class="status-text">{status}</span>
-      <button class="icon-btn" onclick={togglePreview} title="Toggle Preview">
-        {showPreview ? "👁️‍🗨️" : "👁️"}
-      </button>
-    </div>
-    <div class="editor-area">
-      {#key currentFile}
-        <Editor content={fileContent} onSave={handleSave} />
-      {/key}
+      <div class="controls">
+        <button
+          class="icon-btn"
+          onclick={toggleAutosave}
+          title={autosaveEnabled ? "Disable Autosave" : "Enable Autosave"}
+        >
+          {autosaveEnabled ? "💾✅" : "💾❌"}
+        </button>
+        <button
+          class="icon-btn"
+          onclick={togglePreview}
+          title={showPreview ? "Hide Preview" : "Show Preview"}
+        >
+          {showPreview ? "👁️‍🗨️" : "👁️"}
+        </button>
+      </div>
+    </header>
+    <div class="workspace-area">
+      <div
+        class="pane editor-pane"
+        style:width={showPreview ? `${editorWidth}%` : "100%"}
+      >
+        {#key currentFile}
+          <Editor
+            content={fileContent}
+            onSave={handleSave}
+            onChange={handleEditorChange}
+          />
+        {/key}
+      </div>
+
+      {#if showPreview}
+        <div class="resizer" onmousedown={startResize}></div>
+        <div class="pane preview-pane" style:width={`${100 - editorWidth}%`}>
+          <Preview content={fileContent} />
+        </div>
+      {/if}
     </div>
   </main>
 </div>
@@ -87,7 +238,7 @@
     padding: 0;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     overflow: hidden;
-    background-color: #1e1e1e; /* Dark theme base */
+    background-color: #1e1e1e;
     color: #ccc;
   }
 
@@ -119,6 +270,7 @@
     font-size: 0.9em;
     color: #aaa;
     height: 35px;
+    flex-shrink: 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -129,6 +281,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
   }
 
   .icon-btn {
@@ -145,9 +302,29 @@
     color: #fff;
   }
 
-  .editor-area {
+  .workspace-area {
     flex-grow: 1;
-    overflow: hidden; /* Editor handles scroll */
-    background-color: #282c34;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .pane {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .preview-pane {
+    background-color: #1e1e1e;
+  }
+
+  .resizer {
+    width: 5px;
+    cursor: col-resize;
+    background-color: #333;
+    z-index: 10;
+  }
+  .resizer:hover {
+    background-color: #007fd4;
   }
 </style>

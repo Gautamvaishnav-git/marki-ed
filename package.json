@@ -21,7 +21,9 @@
     "@codemirror/view": "^6.39.13",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.6.0",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "@types/markdown-it": "^14.1.2",
+    "markdown-it": "^14.1.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

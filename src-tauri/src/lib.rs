@@ -29,7 +29,8 @@ pub fn run() {
             commands::fs::list_dir,
             commands::fs::set_workspace,
             commands::fs::create_dir,
-            commands::fs::delete_node
+            commands::fs::delete_node,
+            commands::fs::rename_node
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
