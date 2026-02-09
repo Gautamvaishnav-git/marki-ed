@@ -9,12 +9,12 @@
 - [x] Create minimal structure: `components/`, `lib/api.ts`
 
 ### Phase 2: Backend Essentials (1-2 hours)
-- [ ] Create 3 core Rust commands in `src-tauri/commands/`:
+- [x] Create 3 core Rust commands in `src-tauri/commands/`:
   - `read_file(path) -> String`
   - `write_file(path, content) -> Result`
   - `list_dir(path) -> Vec<String>` (flat, non-recursive)
-- [ ] Add workspace root locking (security)
-- [ ] Test commands via Tauri dev tools
+- [x] Add workspace root locking (security)
+- [x] Test commands via Tauri dev tools
 
 ### Phase 3: File Tree (1 hour)
 - [ ] Create `FileTree.svelte` - flat list only
