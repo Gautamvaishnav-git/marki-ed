@@ -21,8 +21,21 @@
 - [x] Wire up `list_dir` command
 - [x] Implement click → emit file path to parent mechanism
 - [x] Use emoji indicators (📁 📝) - no icon libs
+- [x] Use emoji indicators (📁 📝) - no icon libs
+- [x] Implement expandable folders (inline toggle)
+- [x] Add "Markdown Only" filter (default ON)
+- [x] Implement "Open Folder" feature
+- [x] Implement "New File" and "New Folder" buttons (root only)
+- [x] Implement Context Menu (Right-click)
+- [x] Support nested file/folder creation
+- [x] Implement Delete functionality
+- [ ] Highlight selected file/folder
+- [ ] Enable Editor Line Numbers
 
-### Phase 4: Editor Core (2-3 hours)
+### Phase 5: Preview Pane (1 hour)
+- [ ] Install `markdown-it`
+- [ ] Create `Preview.svelte` component
+- [ ] Implement Split View (Sidebar | Editor | Preview)(2-3 hours)
 - [ ] Install CodeMirror 6: `npm i @codemirror/state @codemirror/view @codemirror/lang-markdown`
 - [ ] Create `Editor.svelte` with CodeMirror
 - [ ] Implement file loading via `read_file` on selection

@@ -1,12 +1,17 @@
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::State;
 
 #[tauri::command]
-pub async fn read_file(path: String, workspace: State<'_, PathBuf>) -> Result<String, String> {
-    let full_path = workspace.join(&path);
+pub async fn read_file(
+    path: String,
+    workspace: State<'_, Mutex<PathBuf>>,
+) -> Result<String, String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_path = workspace_path.join(&path);
 
     // Security check
-    if !full_path.starts_with(workspace.inner()) {
+    if !full_path.starts_with(&workspace_path) {
         return Err("Path outside workspace".into());
     }
 
@@ -19,12 +24,13 @@ pub async fn read_file(path: String, workspace: State<'_, PathBuf>) -> Result<St
 pub async fn write_file(
     path: String,
     content: String,
-    workspace: State<'_, PathBuf>,
+    workspace: State<'_, Mutex<PathBuf>>,
 ) -> Result<(), String> {
-    let full_path = workspace.join(&path);
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_path = workspace_path.join(&path);
 
     // Security check
-    if !full_path.starts_with(workspace.inner()) {
+    if !full_path.starts_with(&workspace_path) {
         return Err("Path outside workspace".into());
     }
 
@@ -41,11 +47,15 @@ pub async fn write_file(
 }
 
 #[tauri::command]
-pub async fn list_dir(path: String, workspace: State<'_, PathBuf>) -> Result<Vec<String>, String> {
-    let full_path = workspace.join(&path);
+pub async fn list_dir(
+    path: String,
+    workspace: State<'_, Mutex<PathBuf>>,
+) -> Result<Vec<String>, String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_path = workspace_path.join(&path);
 
     // Security check
-    if !full_path.starts_with(workspace.inner()) {
+    if !full_path.starts_with(&workspace_path) {
         return Err("Path outside workspace".into());
     }
 
@@ -63,12 +73,60 @@ pub async fn list_dir(path: String, workspace: State<'_, PathBuf>) -> Result<Vec
         let prefix = if file_type.is_dir() { "📁 " } else { "📝 " };
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // For MVP, simplistic list
         entries.push(format!("{}{}", prefix, name));
     }
 
-    // Sort directories first, then files? Or just simple sort for now
     entries.sort();
 
     Ok(entries)
+}
+
+#[tauri::command]
+pub async fn set_workspace(
+    path: String,
+    workspace: State<'_, Mutex<PathBuf>>,
+) -> Result<(), String> {
+    let mut workspace_path = workspace.lock().map_err(|e| e.to_string())?;
+    *workspace_path = PathBuf::from(path);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn create_dir(path: String, workspace: State<'_, Mutex<PathBuf>>) -> Result<(), String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_path = workspace_path.join(&path);
+
+    // Security check
+    if !full_path.starts_with(&workspace_path) {
+        return Err("Path outside workspace".into());
+    }
+
+    tokio::fs::create_dir_all(full_path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_node(path: String, workspace: State<'_, Mutex<PathBuf>>) -> Result<(), String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let full_path = workspace_path.join(&path);
+
+    // Security check
+    if !full_path.starts_with(&workspace_path) {
+        return Err("Path outside workspace".into());
+    }
+
+    let metadata = tokio::fs::metadata(&full_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if metadata.is_dir() {
+        tokio::fs::remove_dir_all(full_path)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        tokio::fs::remove_file(full_path)
+            .await
+            .map_err(|e| e.to_string())
+    }
 }
