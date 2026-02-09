@@ -4,6 +4,12 @@
   import FileTree from "../components/FileTree.svelte";
   import Editor from "../components/Editor.svelte";
   import Preview from "../components/Preview.svelte";
+  import {
+    Action,
+    registerAction,
+    removeAction,
+    handleKeyDown,
+  } from "$lib/shortcuts";
 
   let status = $state("Select a file...");
   let fileContent = $state("");
@@ -171,10 +177,21 @@
 
     window.addEventListener("mouseup", stopResize);
     window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Register Global Actions
+    registerAction(Action.SAVE, () => handleSave(fileContent));
+    registerAction(Action.TOGGLE_PREVIEW, togglePreview);
+    registerAction(Action.TOGGLE_AUTOSAVE, toggleAutosave);
 
     return () => {
       window.removeEventListener("mouseup", stopResize);
       window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("keydown", handleKeyDown);
+
+      removeAction(Action.SAVE);
+      removeAction(Action.TOGGLE_PREVIEW);
+      removeAction(Action.TOGGLE_AUTOSAVE);
     };
   });
 </script>

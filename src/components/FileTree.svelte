@@ -9,6 +9,7 @@
         deleteNode,
         renameNode,
     } from "$lib/api.v1";
+    import { Action, registerAction, removeAction } from "$lib/shortcuts";
 
     const dispatch = createEventDispatcher();
 
@@ -95,18 +96,46 @@
     }
 
     async function handleNewFile(contextNode?: TreeNode | null) {
-        const parentPath =
-            contextNode?.type === "dir"
-                ? contextNode.path
-                : contextNode
-                  ? contextNode.path.includes("/")
+        // If no context node, try to infer from selectedFile
+        let effectivePath = contextNode?.path;
+        if (!effectivePath && selectedFile) {
+            effectivePath = selectedFile;
+        }
+
+        const parentPath = effectivePath
+            ? effectivePath.includes("/") // simplistic check, assumes files have extension or isDir we know?
+                ? // Actually we don't know if selectedFile is dir or file here easily without looking up node.
+                  // But selectedFile is usually a file in this app.
+                  effectivePath.split("/").slice(0, -1).join("/")
+                : "."
+            : ".";
+
+        // If contextNode provided and is dir, use it directly
+        if (contextNode?.type === "dir") {
+            // Re-derive for directory context
+            // logic above was trying to be too clever. Let's simplify.
+        }
+
+        // Correct logic:
+        let base = ".";
+        if (contextNode) {
+            base =
+                contextNode.type === "dir"
+                    ? contextNode.path
+                    : contextNode.path.includes("/")
                       ? contextNode.path.split("/").slice(0, -1).join("/")
-                      : "."
-                  : ".";
+                      : ".";
+        } else if (selectedFile) {
+            // Assume selectedFile is a file (since we only select files mostly)
+            base = selectedFile.includes("/")
+                ? selectedFile.split("/").slice(0, -1).join("/")
+                : ".";
+        }
+
         const name = prompt("Enter file name (e.g. note.md):");
         if (!name) return;
 
-        const fullPath = parentPath === "." ? name : `${parentPath}/${name}`;
+        const fullPath = base === "." ? name : `${base}/${name}`;
 
         try {
             await writeFile(fullPath, "");
@@ -119,18 +148,24 @@
     }
 
     async function handleNewFolder(contextNode?: TreeNode | null) {
-        const parentPath =
-            contextNode?.type === "dir"
-                ? contextNode.path
-                : contextNode
-                  ? contextNode.path.includes("/")
+        let base = ".";
+        if (contextNode) {
+            base =
+                contextNode.type === "dir"
+                    ? contextNode.path
+                    : contextNode.path.includes("/")
                       ? contextNode.path.split("/").slice(0, -1).join("/")
-                      : "."
-                  : ".";
+                      : ".";
+        } else if (selectedFile) {
+            base = selectedFile.includes("/")
+                ? selectedFile.split("/").slice(0, -1).join("/")
+                : ".";
+        }
+
         const name = prompt("Enter folder name:");
         if (!name) return;
 
-        const fullPath = parentPath === "." ? name : `${parentPath}/${name}`;
+        const fullPath = base === "." ? name : `${base}/${name}`;
 
         try {
             await createDir(fullPath);
@@ -221,6 +256,13 @@
 
     onMount(() => {
         loadRoots();
+        registerAction(Action.NEW_FILE, () => handleNewFile());
+        registerAction(Action.NEW_FOLDER, () => handleNewFolder());
+
+        return () => {
+            removeAction(Action.NEW_FILE);
+            removeAction(Action.NEW_FOLDER);
+        };
     });
 </script>
 
