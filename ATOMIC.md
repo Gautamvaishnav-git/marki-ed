@@ -25,6 +25,10 @@
 - [x] Line Numbers & Wrapping
 - [x] Live Preview (`markdown-it`)
 - [x] Resizable Split Pane
+- [x] Auto Completion
+- [x] Sidebar Toggle (Ctrl+B)
+- [x] Search Functionality (Ctrl+P)
+- [x] Recent Files List (Start Screen)
 
 ### Polish & Persistence
 - [x] Autosave (Toggle + Logic)
@@ -40,7 +44,5 @@
 - [ ] Context-aware actions
 
 ### Future Polish
-- [ ] Search functionality
 - [ ] Custom Themes
-- [ ] Recent Files List
 - [ ] Production Build & Installer

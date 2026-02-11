@@ -4,6 +4,8 @@ export enum Action {
     SAVE = "SAVE",
     TOGGLE_PREVIEW = "TOGGLE_PREVIEW",
     TOGGLE_AUTOSAVE = "TOGGLE_AUTOSAVE",
+    TOGGLE_SIDEBAR = "TOGGLE_SIDEBAR",
+    SEARCH = "SEARCH",
 }
 
 type Handler = () => void;
@@ -35,9 +37,12 @@ export function handleKeyDown(e: KeyboardEvent) {
     } else if (key === 's') {
         if (!shift) action = Action.SAVE;
     } else if (key === 'p') {
-        if (!shift) action = Action.TOGGLE_PREVIEW;
+        if (!shift) action = Action.SEARCH;
+        else action = Action.TOGGLE_PREVIEW;
     } else if (key === ',') {
         if (!shift) action = Action.TOGGLE_AUTOSAVE;
+    } else if (key === 'b') {
+        if (!shift) action = Action.TOGGLE_SIDEBAR;
     }
 
     if (action && handlers[action]) {

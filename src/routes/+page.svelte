@@ -4,6 +4,9 @@
   import FileTree from "../components/FileTree.svelte";
   import Editor from "../components/Editor.svelte";
   import Preview from "../components/Preview.svelte";
+  import QuickOpen from "../components/QuickOpen.svelte";
+  import StartScreen from "../components/StartScreen.svelte";
+  import { getRecentFiles, addToRecents } from "$lib/persistence";
   import {
     Action,
     registerAction,
@@ -15,6 +18,9 @@
   let fileContent = $state("");
   let currentFile = $state<string | null>(null);
   let showPreview = $state(false);
+  let showSidebar = $state(true);
+  let showQuickOpen = $state(false);
+  let recentFiles = $state<string[]>([]);
 
   // Autosave State
   let autosaveEnabled = $state(false);
@@ -37,6 +43,9 @@
       fileContent = content;
       currentFile = filename;
       status = `Viewing: ${filename}`;
+
+      addToRecents(filename);
+      recentFiles = getRecentFiles();
     } catch (e) {
       status = `Error reading ${filename}: ${e}`;
       console.error(e);
@@ -94,6 +103,14 @@
 
   function togglePreview() {
     showPreview = !showPreview;
+  }
+
+  function toggleSidebar() {
+    showSidebar = !showSidebar;
+  }
+
+  function toggleQuickOpen() {
+    showQuickOpen = !showQuickOpen;
   }
 
   function toggleAutosave() {
@@ -173,6 +190,7 @@
   onMount(() => {
     loadLastWorkspace().then(() => {
       workspaceReady = true;
+      recentFiles = getRecentFiles();
     });
 
     window.addEventListener("mouseup", stopResize);
@@ -182,6 +200,8 @@
     // Register Global Actions
     registerAction(Action.SAVE, () => handleSave(fileContent));
     registerAction(Action.TOGGLE_PREVIEW, togglePreview);
+    registerAction(Action.TOGGLE_SIDEBAR, toggleSidebar);
+    registerAction(Action.SEARCH, toggleQuickOpen);
     registerAction(Action.TOGGLE_AUTOSAVE, toggleAutosave);
 
     return () => {
@@ -191,13 +211,15 @@
 
       removeAction(Action.SAVE);
       removeAction(Action.TOGGLE_PREVIEW);
+      removeAction(Action.TOGGLE_SIDEBAR);
+      removeAction(Action.SEARCH);
       removeAction(Action.TOGGLE_AUTOSAVE);
     };
   });
 </script>
 
 <div class="app-container">
-  <aside class="sidebar">
+  <aside class="sidebar" class:hidden={!showSidebar}>
     {#if workspaceReady}
       <FileTree
         on:file-selected={handleFileSelected}
@@ -226,27 +248,73 @@
       </div>
     </header>
     <div class="workspace-area">
-      <div
-        class="pane editor-pane"
-        style:width={showPreview ? `${editorWidth}%` : "100%"}
-      >
-        {#key currentFile}
-          <Editor
-            content={fileContent}
-            onSave={handleSave}
-            onChange={handleEditorChange}
-          />
-        {/key}
-      </div>
-
-      {#if showPreview}
-        <div class="resizer" onmousedown={startResize}></div>
-        <div class="pane preview-pane" style:width={`${100 - editorWidth}%`}>
-          <Preview content={fileContent} />
+      {#if !currentFile}
+        <StartScreen
+          {recentFiles}
+          on:open-folder={() => {
+            // We need to expose handleOpenFolder from somewhere or just use api directly?
+            // FileTree has logic. Let's just key it.
+            // Actually FileTree logic is inside FileTree.
+            // We should move openFolder logic to parent or import it.
+            // It is imported from api.v1.
+            // But we want to update the workspace.
+            // Let's use the API directly here.
+            import("$lib/api.v1").then((mod) => {
+              mod.openFolder().then((path) => {
+                if (path) {
+                  mod.setWorkspace(path).then(() => {
+                    localStorage.setItem("lastWorkspace", path);
+                    // Trigger reload? Or just trust FileTree to update if we could signal it.
+                    // Simplest: window.location.reload();
+                    window.location.reload();
+                  });
+                }
+              });
+            });
+          }}
+          on:open-file={(e) => handleFileSelected(e)}
+          on:new-file={() => {
+            // Trigger new file action?
+            // We don't have direct access to FileTree methods.
+            // We can just show a prompt here.
+            // But better to just let user use the shortcut or sidebar.
+            // Let's just simulate Ctr+N? No.
+            alert("Use the sidebar or Ctrl+N to create a new file.");
+          }}
+        />
+      {:else}
+        <div
+          class="pane editor-pane"
+          style:width={showPreview ? `${editorWidth}%` : "100%"}
+        >
+          {#key currentFile}
+            <Editor
+              content={fileContent}
+              onSave={handleSave}
+              onChange={handleEditorChange}
+            />
+          {/key}
         </div>
+
+        {#if showPreview}
+          <div class="resizer" onmousedown={startResize}></div>
+          <div class="pane preview-pane" style:width={`${100 - editorWidth}%`}>
+            <Preview content={fileContent} />
+          </div>
+        {/if}
       {/if}
     </div>
   </main>
+
+  {#if showQuickOpen}
+    <QuickOpen
+      on:select={(e) => {
+        handleFileSelected(e); // Event detail is file path
+        showQuickOpen = false;
+      }}
+      on:close={() => (showQuickOpen = false)}
+    />
+  {/if}
 </div>
 
 <style>
@@ -270,6 +338,11 @@
     height: 100%;
     flex-shrink: 0;
     border-right: 1px solid #333;
+    transition: margin-left 0.2s ease-in-out;
+  }
+
+  .sidebar.hidden {
+    margin-left: -250px;
   }
 
   .main-content {

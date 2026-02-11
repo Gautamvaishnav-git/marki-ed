@@ -154,3 +154,42 @@ pub async fn rename_node(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn walk_dir(
+    path: String,
+    workspace: State<'_, Mutex<PathBuf>>,
+) -> Result<Vec<String>, String> {
+    let workspace_path = workspace.lock().map_err(|e| e.to_string())?.clone();
+    let root_path = workspace_path.join(&path);
+
+    // Security check
+    if !root_path.starts_with(&workspace_path) {
+        return Err("Path outside workspace".into());
+    }
+
+    let entries = tauri::async_runtime::spawn_blocking(move || {
+        let mut files = Vec::new();
+        let mut dirs = vec![root_path];
+
+        while let Some(dir) = dirs.pop() {
+            if let Ok(read_dir) = std::fs::read_dir(dir) {
+                for entry in read_dir.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        dirs.push(path);
+                    } else {
+                        if let Ok(rel) = path.strip_prefix(&workspace_path) {
+                            files.push(rel.to_string_lossy().replace("\\\\", "/"));
+                        }
+                    }
+                }
+            }
+        }
+        files
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(entries)
+}

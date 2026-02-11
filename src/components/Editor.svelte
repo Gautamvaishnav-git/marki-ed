@@ -9,6 +9,7 @@
         historyKeymap,
     } from "@codemirror/commands";
     import { oneDark } from "@codemirror/theme-one-dark";
+    import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 
     // Using $props() for Svelte 5
     let {
@@ -27,6 +28,7 @@
                 keymap.of([
                     ...defaultKeymap,
                     ...historyKeymap,
+                    ...completionKeymap,
                     {
                         key: "Mod-s",
                         run: () => {
@@ -38,6 +40,7 @@
                     },
                 ]),
                 history(),
+                autocompletion(),
                 markdown(),
                 oneDark,
                 EditorView.lineWrapping,
